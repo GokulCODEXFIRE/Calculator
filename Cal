@@ -1,0 +1,112 @@
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef enum { TOK_NUM, TOK_PLUS, TOK_MINUS, TOK_MUL, TOK_DIV,
+               TOK_LPAREN, TOK_RPAREN, TOK_END } TokenType;
+
+typedef struct {
+    TokenType type;
+    double value; // only used if type == TOK_NUM
+} Token;
+
+// Global state for the tokenizer/parser (fine for a small project)
+const char *src;
+int pos;
+Token current;
+
+void skip_spaces() {
+    while (src[pos] == ' ') pos++;
+}
+
+Token next_token() {
+    skip_spaces();
+    char c = src[pos];
+
+    if (c == '\0') return (Token){TOK_END, 0};
+
+    if (isdigit((unsigned char)c) || c == '.') {
+        char *end;
+        double val = strtod(&src[pos], &end);
+        pos += (int)(end - &src[pos]);
+        return (Token){TOK_NUM, val};
+    }
+
+    pos++; // consume the character
+    switch (c) {
+        case '+': return (Token){TOK_PLUS, 0};
+        case '-': return (Token){TOK_MINUS, 0};
+        case '*': return (Token){TOK_MUL, 0};
+        case '/': return (Token){TOK_DIV, 0};
+        case '(': return (Token){TOK_LPAREN, 0};
+        case ')': return (Token){TOK_RPAREN, 0};
+        default:
+            fprintf(stderr, "Unexpected character: %c\n", c);
+            exit(1);
+    }
+}
+
+void advance() { current = next_token(); }
+
+double parse_expr(); // forward declaration
+
+double parse_factor() {
+    if (current.type == TOK_NUM) {
+        double val = current.value;
+        advance();
+        return val;
+    }
+    if (current.type == TOK_LPAREN) {
+        advance(); // consume '('
+        double val = parse_expr();
+        if (current.type != TOK_RPAREN) {
+            fprintf(stderr, "Expected ')'\n");
+            exit(1);
+        }
+        advance(); // consume ')'
+        return val;
+    }
+    fprintf(stderr, "Unexpected token in factor\n");
+    exit(1);
+}
+
+double parse_term() {
+    double val = parse_factor();
+    while (current.type == TOK_MUL || current.type == TOK_DIV) {
+        TokenType op = current.type;
+        advance();
+        double rhs = parse_factor();
+        val = (op == TOK_MUL) ? val * rhs : val / rhs;
+    }
+    return val;
+}
+
+double parse_expr() {
+    double val = parse_term();
+    while (current.type == TOK_PLUS || current.type == TOK_MINUS) {
+        TokenType op = current.type;
+        advance();
+        double rhs = parse_term();
+        val = (op == TOK_PLUS) ? val + rhs : val - rhs;
+    }
+    return val;
+}
+
+int main() {
+    char line[256];
+    printf("C Calculator (type 'exit' to quit)\n");
+    while (1) {
+        printf("> ");
+        if (!fgets(line, sizeof(line), stdin)) break;
+        line[strcspn(line, "\n")] = 0;
+        if (strcmp(line, "exit") == 0) break;
+
+        src = line;
+        pos = 0;
+        advance(); // load first token
+        double result = parse_expr();
+        printf("= %g\n", result);
+    }
+    return 0;
+}
